@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import Image from "next/image";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import mark from "@/assets/mark.png";
 
 /* ------------------------------------------------------------------ */
 /*  Turlar (server lib/visa.ts dagi bilan bir xil)                      */
@@ -34,6 +36,7 @@ type View =
 const EMPTY: Fields = { passport: "", surname: "", name: "", patronymic: "", birthDate: "" };
 const POLL_MS = 2000;
 const MAX_POLLS = 45;
+const DONE_STEP = 9999;
 
 /* ------------------------------------------------------------------ */
 /*  Yordamchilar                                                        */
@@ -42,6 +45,8 @@ const MAX_POLLS = 45;
 const clean = (s: string) => s.replace(/\s+/g, " ").trim().toUpperCase();
 const onlyLatin = (s: string) => s.replace(/[^A-Za-z\s'`ʻʼ‘’-]/g, "");
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const reducedMotion = () =>
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const KR: Record<string, string> = {
   "유학.연수": "O'qish / malaka oshirish",
@@ -70,12 +75,25 @@ function formatDate(iso: string) {
   return m ? `${+m[3]}-${MONTHS[+m[2] - 1]}, ${m[1]}` : iso;
 }
 
-const LOADING_MSGS = [
-  "So'rov yuborildi",
-  "Elchixona bazasidan ma'lumot olinmoqda",
-  "Bir necha soniya kuting",
-  "Deyarli tayyor",
-];
+/** Elchixonadagi holatdan 3 bosqichli timeline: 0 qabul, 1 ko'rib chiqish, 2 qaror */
+function stageOf(v: VisaInfo): { index: number; tone: "ok" | "bad" | "warn" | "neutral"; final: string } | null {
+  const s = v.progressStatus;
+  if (s === "접수") return { index: 0, tone: "neutral", final: "Qaror" };
+  if (s === "심사" || s === "심사중") return { index: 1, tone: "neutral", final: "Qaror" };
+  if (s === "보완") return { index: 1, tone: "warn", final: "Qaror" };
+  if (s === "허가" || s === "발급") return { index: 2, tone: "ok", final: s === "발급" ? "Viza berildi" : "Ruxsat berildi" };
+  if (s === "불허" || s === "반려" || s === "취소") return { index: 2, tone: "bad", final: KR[s] };
+  return null;
+}
+const isApproved = (v: VisaInfo) =>
+  v.progressStatus === "허가" || v.progressStatus === "발급" || /check|approved|success|done/i.test(v.icon);
+
+const LOADING_STEPS = ["So'rov yuborildi", "Elchixona bazasidan qidirilmoqda", "Natija tayyorlanmoqda"];
+function loadingStage(step: number) {
+  if (step >= DONE_STEP) return 3;
+  if (step === 0) return 0;
+  return step < 5 ? 1 : 2;
+}
 
 async function post<T>(url: string, body: unknown, signal: AbortSignal): Promise<T> {
   let res: Response;
@@ -108,6 +126,24 @@ const sleep = (ms: number, signal: AbortSignal) =>
     }, { once: true });
   });
 
+/** 0 dan target gacha silliq sanash */
+function useCountUp(target: number, duration = 900) {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    if (reducedMotion()) { setV(target); return; }
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / duration);
+      setV(Math.round(target * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return v;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Komponent                                                           */
 /* ------------------------------------------------------------------ */
@@ -122,6 +158,7 @@ export default function VisaChecker() {
   const honeypot = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     startedAt.current = performance.now();
@@ -130,7 +167,9 @@ export default function VisaChecker() {
   }, []);
 
   useEffect(() => {
-    if (view.kind !== "form") topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (view.kind === "form") return;
+    const el = topRef.current;
+    if (el && el.getBoundingClientRect().top < 70) el.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
   }, [view.kind]);
 
   const fullName = [f.surname, f.name, f.patronymic].map(clean).filter(Boolean).join(" ");
@@ -154,10 +193,24 @@ export default function VisaChecker() {
     return errs;
   }
 
+  /** Xato maydonlarni silkitish (har urinishda qayta o'ynaydi) */
+  function shakeInvalid() {
+    if (reducedMotion()) return;
+    requestAnimationFrame(() => {
+      formRef.current?.querySelectorAll<HTMLElement>(".field.invalid input").forEach((el) =>
+        el.animate(
+          [{ transform: "translateX(0)" }, { transform: "translateX(-7px)" }, { transform: "translateX(6px)" },
+           { transform: "translateX(-4px)" }, { transform: "translateX(2px)" }, { transform: "translateX(0)" }],
+          { duration: 420, easing: "ease-out" },
+        ),
+      );
+    });
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const errs = validate();
-    if (errs.length) { setFormError(errs.join(" ")); return; }
+    if (errs.length) { setFormError(errs.join(" ")); shakeInvalid(); return; }
 
     abort.current?.abort();
     const ctrl = new AbortController();
@@ -184,10 +237,15 @@ export default function VisaChecker() {
         result = (await post<{ result: VisaResult }>("/api/visa/status", { token: start.token }, ctrl.signal)).result;
       }
 
-      if (result.state === "done") setView({ kind: "result", visa: result.visa, who });
-      else if (result.state === "not_found")
+      if (result.state === "done") {
+        setView({ kind: "loading", step: DONE_STEP }); // hamma bosqichlar ✓
+        await sleep(reducedMotion() ? 0 : 550, ctrl.signal);
+        setView({ kind: "result", visa: result.visa, who });
+      } else if (result.state === "not_found") {
         throw new Error(result.message || "Bu ma'lumotlar bo'yicha ariza topilmadi. Pasport raqami, ism-familiya (pasportdagidek) va tug'ilgan sanani tekshiring.");
-      else throw new Error(result.message || "Tekshiruv amalga oshmadi. Qaytadan urinib ko'ring.");
+      } else {
+        throw new Error(result.message || "Tekshiruv amalga oshmadi. Qaytadan urinib ko'ring.");
+      }
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
       setView({ kind: "error", message: (err as Error).message || "Noma'lum xatolik." });
@@ -203,77 +261,77 @@ export default function VisaChecker() {
 
   return (
     <div ref={topRef} className="checker">
-      {view.kind === "form" && (
-        <form className="card" onSubmit={onSubmit} noValidate>
-          <Field label="Pasport raqami" id="passport" invalid={invalid.passport}>
-            <input
-              id="passport" value={f.passport} placeholder="FB1234567" maxLength={12}
-              autoComplete="off" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
-              onChange={(e) => set("passport", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
-            />
-          </Field>
-
-          <div className="row">
-            <Field label="Familiya" id="surname" invalid={invalid.surname}>
-              <input id="surname" value={f.surname} placeholder="SOBIROVA" maxLength={40}
-                autoComplete="family-name" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
-                onChange={(e) => set("surname", onlyLatin(e.target.value))} />
+      {/* key: har holat almashganda kirish animatsiyasi qayta o'ynaydi */}
+      <div key={view.kind} className="view-enter">
+        {view.kind === "form" && (
+          <form ref={formRef} className="card" onSubmit={onSubmit} noValidate>
+            <Field label="Pasport raqami" id="passport" invalid={invalid.passport}>
+              <input
+                id="passport" value={f.passport} placeholder="FB1234567" maxLength={12}
+                autoComplete="off" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
+                onChange={(e) => set("passport", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+              />
             </Field>
-            <Field label="Ism" id="name" invalid={invalid.name}>
-              <input id="name" value={f.name} placeholder="MUBINAKHON" maxLength={40}
-                autoComplete="given-name" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
-                onChange={(e) => set("name", onlyLatin(e.target.value))} />
+
+            <div className="row">
+              <Field label="Familiya" id="surname" invalid={invalid.surname}>
+                <input id="surname" value={f.surname} placeholder="SOBIROVA" maxLength={40}
+                  autoComplete="family-name" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
+                  onChange={(e) => set("surname", onlyLatin(e.target.value))} />
+              </Field>
+              <Field label="Ism" id="name" invalid={invalid.name}>
+                <input id="name" value={f.name} placeholder="MUBINAKHON" maxLength={40}
+                  autoComplete="given-name" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
+                  onChange={(e) => set("name", onlyLatin(e.target.value))} />
+              </Field>
+            </div>
+
+            <Field label="Otasining ismi" optional="pasportda bo'lsa" id="patronymic"
+              hint="Pasportdagi lotin yozuvida: DILMUROD KIZI yoki ALISHER UGLI">
+              <input id="patronymic" value={f.patronymic} placeholder="DILMUROD KIZI" maxLength={40}
+                autoComplete="additional-name" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
+                onChange={(e) => set("patronymic", onlyLatin(e.target.value))} />
             </Field>
+
+            <Field label="Tug'ilgan sana" id="birthDate" invalid={invalid.birthDate}>
+              <input id="birthDate" type="date" value={f.birthDate} min="1920-01-01" max={maxDate || undefined}
+                autoComplete="bday" onChange={(e) => set("birthDate", e.target.value)} />
+            </Field>
+
+            {/* Honeypot: odamlar ko'rmaydi, botlar to'ldiradi */}
+            <div className="hp" aria-hidden="true">
+              <label htmlFor="website">Website</label>
+              <input id="website" ref={honeypot} tabIndex={-1} autoComplete="off" defaultValue="" />
+            </div>
+
+            <div className={`preview-wrap${fullName ? " open" : ""}`}>
+              <div>
+                <p className="preview">Yuboriladigan ism: <b>{fullName || " "}</b></p>
+              </div>
+            </div>
+            {formError && <p className="alert" role="alert">{formError}</p>}
+
+            <button type="submit" className="btn btn-primary btn-shine">
+              <span>Tekshirish</span>
+              <SearchIcon />
+            </button>
+            <p className="privacy"><LockIcon /> Ma'lumotlaringiz saytimizda saqlanmaydi — faqat tekshiruv uchun ishlatiladi.</p>
+          </form>
+        )}
+
+        {view.kind === "loading" && <Loading step={view.step} onCancel={() => reset(false)} />}
+
+        {view.kind === "result" && <Result visa={view.visa} who={view.who} onAgain={() => reset(true)} />}
+
+        {view.kind === "error" && (
+          <div className="card center" role="alert">
+            <div className="err-ico"><WarnIcon /></div>
+            <h2>Natija olinmadi</h2>
+            <p className="muted">{view.message}</p>
+            <button type="button" className="btn btn-primary" onClick={() => reset(false)}>Qaytadan urinish</button>
           </div>
-
-          <Field label="Otasining ismi" optional="pasportda bo'lsa" id="patronymic"
-            hint="Pasportdagi lotin yozuvida: DILMUROD KIZI yoki ALISHER UGLI">
-            <input id="patronymic" value={f.patronymic} placeholder="DILMUROD KIZI" maxLength={40}
-              autoComplete="additional-name" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
-              onChange={(e) => set("patronymic", onlyLatin(e.target.value))} />
-          </Field>
-
-          <Field label="Tug'ilgan sana" id="birthDate" invalid={invalid.birthDate}>
-            <input id="birthDate" type="date" value={f.birthDate} min="1920-01-01" max={maxDate || undefined}
-              autoComplete="bday" onChange={(e) => set("birthDate", e.target.value)} />
-          </Field>
-
-          {/* Honeypot: odamlar ko'rmaydi, botlar to'ldiradi */}
-          <div className="hp" aria-hidden="true">
-            <label htmlFor="website">Website</label>
-            <input id="website" ref={honeypot} tabIndex={-1} autoComplete="off" defaultValue="" />
-          </div>
-
-          {fullName && (
-            <p className="preview">Yuboriladigan ism: <b>{fullName}</b></p>
-          )}
-          {formError && <p className="alert" role="alert">{formError}</p>}
-
-          <button type="submit" className="btn btn-primary">Tekshirish</button>
-          <p className="privacy"><LockIcon /> Ma'lumotlaringiz saytimizda saqlanmaydi — faqat tekshiruv uchun ishlatiladi.</p>
-        </form>
-      )}
-
-      {view.kind === "loading" && (
-        <div className="card loading" aria-live="polite">
-          <div className="spinner" />
-          <h2>Tekshirilmoqda…</h2>
-          <p>{LOADING_MSGS[Math.min(LOADING_MSGS.length - 1, Math.floor(view.step / 4))]}</p>
-          <div className="bar"><span style={{ width: `${Math.min(95, 8 + (view.step / MAX_POLLS) * 100)}%` }} /></div>
-          <button type="button" className="btn btn-ghost" onClick={() => reset(false)}>Bekor qilish</button>
-        </div>
-      )}
-
-      {view.kind === "result" && <Result visa={view.visa} who={view.who} onAgain={() => reset(true)} />}
-
-      {view.kind === "error" && (
-        <div className="card center" role="alert">
-          <div className="err-ico"><WarnIcon /></div>
-          <h2>Natija olinmadi</h2>
-          <p className="muted">{view.message}</p>
-          <button type="button" className="btn btn-primary" onClick={() => reset(false)}>Qaytadan urinish</button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -294,25 +352,82 @@ function Field(props: {
   );
 }
 
+function Loading({ step, onCancel }: { step: number; onCancel: () => void }) {
+  const stage = loadingStage(step);
+  const pct = step >= DONE_STEP ? 100 : Math.min(92, 10 + (step / 12) * 80);
+  return (
+    <div className="card loading" aria-live="polite" aria-busy={stage < 3}>
+      <div className={`loader${stage === 3 ? " done" : ""}`}>
+        <span className="ring r1" />
+        <span className="ring r2" />
+        <Image src={mark} alt="" className="loader-mark" />
+      </div>
+      <h2>{stage === 3 ? "Tayyor!" : "Tekshirilmoqda…"}</h2>
+
+      <ul className="lsteps">
+        {LOADING_STEPS.map((t, i) => {
+          const state = i < stage ? "done" : i === stage ? "active" : "idle";
+          return (
+            <li key={i} className={state}>
+              <span className="lstep-ico">{state === "done" ? <CheckIcon /> : <i />}</span>
+              {t}
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="bar"><span style={{ width: `${pct}%` }} /></div>
+      {stage < 3 && <button type="button" className="btn btn-ghost" onClick={onCancel}>Bekor qilish</button>}
+    </div>
+  );
+}
+
 function Result({ visa, who, onAgain }: { visa: VisaInfo; who: string; onAgain: () => void }) {
   const p = visa.processing;
-  const days = p?.message.match(/(\d+)\s*kun/)?.[1] ?? (p?.averageDays ? String(Math.round(p.averageDays)) : null);
+  const daysTarget = Number(p?.message.match(/(\d+)\s*kun/)?.[1] ?? (p?.averageDays ? Math.round(p.averageDays) : 0));
+  const days = useCountUp(daysTarget);
+  const stage = stageOf(visa);
+  const approved = isApproved(visa);
+
+  const rows: [string, string][] = [];
+  if (visa.applicationDate) rows.push(["Ariza sanasi", formatDate(visa.applicationDate)]);
+  if (visa.visaType) rows.push(["Viza turi", tr(visa.visaType)]);
+  if (visa.entryPurpose && visa.entryPurpose !== visa.visaType) rows.push(["Kirish maqsadi", tr(visa.entryPurpose)]);
+  if (visa.progressStatus) rows.push(["Elchixonada", tr(visa.progressStatus)]);
 
   return (
     <div className="card result" aria-live="polite">
-      <div className="result-head" style={{ background: visa.color }}>
-        <div className="result-ico"><StatusIcon name={visa.icon} /></div>
-        <div>
-          <small>Ariza holati</small>
-          <h2>{visa.status || tr(visa.progressStatus) || "Noma'lum"}</h2>
-          {visa.responseText && <p>{visa.responseText}</p>}
+      {approved && <Confetti />}
+      <div className="result-head" style={{ "--status": visa.color } as CSSProperties}>
+        <div className="result-ico pop"><StatusIcon name={visa.icon} /></div>
+        <div className="result-titles">
+          <small className="rise" style={{ animationDelay: "120ms" }}>Ariza holati</small>
+          <h2 className="rise" style={{ animationDelay: "200ms" }}>{visa.status || tr(visa.progressStatus) || "Noma'lum"}</h2>
+          {visa.responseText && <p className="rise" style={{ animationDelay: "280ms" }}>{visa.responseText}</p>}
         </div>
       </div>
 
       <div className="result-body">
-        {p && (p.message || days) && (
-          <div className="eta">
-            {days && <div className="eta-num">{days}<small>kun</small></div>}
+        {stage && (
+          <div className={`timeline tone-${stage.tone} rise`} style={{ animationDelay: "320ms", "--p": `${stage.index * 50}%` } as CSSProperties}>
+            <div className="tl-track"><span className="tl-fill" /></div>
+            {["Qabul qilindi", "Ko'rib chiqish", stage.final].map((label, i) => (
+              <div key={i} className={`tl-step${i < stage.index ? " passed" : i === stage.index ? " current" : ""}`}
+                style={{ animationDelay: `${450 + i * 180}ms` }}>
+                <span className="tl-dot">{i < stage.index ? <CheckIcon /> : null}</span>
+                <span className="tl-label">{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {p && (p.message || daysTarget > 0) && (
+          <div className="eta rise" style={{ animationDelay: "420ms" }}>
+            {daysTarget > 0 && (
+              <div className="eta-num" aria-label={`${daysTarget} kun`}>
+                <span>{days}</span><small>kun</small>
+              </div>
+            )}
             <div>
               <b>{p.message || "Taxminiy muddat"}</b>{" "}
               <span className={`badge ${p.isDelayed ? "late" : "ok"}`}>{p.isDelayed ? "Kechikmoqda" : "O'z vaqtida"}</span>
@@ -322,14 +437,15 @@ function Result({ visa, who, onAgain }: { visa: VisaInfo; who: string; onAgain: 
         )}
 
         <dl>
-          {visa.applicationDate && (<><dt>Ariza sanasi</dt><dd>{formatDate(visa.applicationDate)}</dd></>)}
-          {visa.visaType && (<><dt>Viza turi</dt><dd>{tr(visa.visaType)}</dd></>)}
-          {visa.entryPurpose && visa.entryPurpose !== visa.visaType && (<><dt>Kirish maqsadi</dt><dd>{tr(visa.entryPurpose)}</dd></>)}
-          {visa.progressStatus && (<><dt>Elchixonada</dt><dd>{tr(visa.progressStatus)}</dd></>)}
+          {rows.map(([k, v], i) => (
+            <div key={k} className="dl-row rise" style={{ animationDelay: `${500 + i * 70}ms` }}>
+              <dt>{k}</dt><dd>{v}</dd>
+            </div>
+          ))}
         </dl>
 
         {visa.requiresPdf && (
-          <p className="note">Bu holat uchun qo'shimcha hujjat talab qilinadi. Batafsil ma'lumot uchun bizga yozing.</p>
+          <p className="note rise" style={{ animationDelay: "700ms" }}>Bu holat uchun qo'shimcha hujjat talab qilinadi. Batafsil ma'lumot uchun bizga yozing.</p>
         )}
 
         <p className="who">{who}</p>
@@ -339,15 +455,36 @@ function Result({ visa, who, onAgain }: { visa: VisaInfo; who: string; onAgain: 
   );
 }
 
+/** Faqat CSS bilan ishlaydigan yengil konfetti (viza ruxsat etilganda) */
+function Confetti() {
+  const colors = ["#FBB03B", "#43A047", "#FFD27A", "#111111", "#EF9D1F"];
+  const pieces = Array.from({ length: 28 }, (_, i) => ({
+    left: `${(i * 37) % 100}%`,
+    delay: `${450 + (i % 7) * 90}ms`,
+    dur: `${1800 + ((i * 53) % 900)}ms`,
+    rot: `${(i * 47) % 360}deg`,
+    x: `${((i * 29) % 60) - 30}px`,
+    bg: colors[i % colors.length],
+  }));
+  return (
+    <div className="confetti" aria-hidden="true">
+      {pieces.map((c, i) => (
+        <i key={i} style={{ left: c.left, background: c.bg, animationDelay: c.delay, animationDuration: c.dur,
+          "--r": c.rot, "--x": c.x } as CSSProperties} />
+      ))}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Ikonkalar                                                           */
 /* ------------------------------------------------------------------ */
 
-const svg = { width: 24, height: 24, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
+const svg = { width: 24, height: 24, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
 
 function StatusIcon({ name }: { name: string }) {
   const n = name.toLowerCase();
-  if (/check|done|success|approved/.test(n)) return <svg {...svg}><circle cx="12" cy="12" r="10" /><path d="m8 12 3 3 5-6" /></svg>;
+  if (/check|done|success|approved/.test(n)) return <svg {...svg}><circle cx="12" cy="12" r="10" /><path className="draw" d="m8 12 3 3 5-6" /></svg>;
   if (/cancel|close|error|block|reject|denied/.test(n)) return <svg {...svg}><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6M9 9l6 6" /></svg>;
   if (/warn|report/.test(n)) return <WarnIcon />;
   if (/time|schedule|hourglass|pending|clock/.test(n)) return <svg {...svg}><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>;
@@ -355,6 +492,12 @@ function StatusIcon({ name }: { name: string }) {
 }
 function WarnIcon() {
   return <svg {...svg}><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></svg>;
+}
+function CheckIcon() {
+  return <svg {...svg} width={14} height={14} strokeWidth={3}><path d="m5 12 5 5 9-10" /></svg>;
+}
+function SearchIcon() {
+  return <svg {...svg} width={18} height={18} strokeWidth={2.4}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>;
 }
 function LockIcon() {
   return <svg {...svg} width={14} height={14}><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>;

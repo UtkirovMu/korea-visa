@@ -288,7 +288,7 @@ export default function VisaChecker() {
 
             <Field label="Otasining ismi" optional="pasportda bo'lsa" id="patronymic"
               hint="Pasportdagi lotin yozuvida: FALONCHI UGLI yoki FALONCHI KIZI">
-              <input id="patronymic" value={f.patronymic} placeholder="FALONCHI UGLI" maxLength={40}
+              <input id="patronymic" value={f.patronymic} placeholder="FALONCHI UGLI / KIZI" maxLength={40}
                 autoComplete="additional-name" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
                 onChange={(e) => set("patronymic", onlyLatin(e.target.value))} />
             </Field>

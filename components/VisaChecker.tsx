@@ -275,20 +275,20 @@ export default function VisaChecker() {
 
             <div className="row">
               <Field label="Familiya" id="surname" invalid={invalid.surname}>
-                <input id="surname" value={f.surname} placeholder="SOBIROVA" maxLength={40}
+                <input id="surname" value={f.surname} placeholder="FALONCHIYEV" maxLength={40}
                   autoComplete="family-name" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
                   onChange={(e) => set("surname", onlyLatin(e.target.value))} />
               </Field>
               <Field label="Ism" id="name" invalid={invalid.name}>
-                <input id="name" value={f.name} placeholder="MUBINAKHON" maxLength={40}
+                <input id="name" value={f.name} placeholder="FALONCHI" maxLength={40}
                   autoComplete="given-name" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
                   onChange={(e) => set("name", onlyLatin(e.target.value))} />
               </Field>
             </div>
 
             <Field label="Otasining ismi" optional="pasportda bo'lsa" id="patronymic"
-              hint="Pasportdagi lotin yozuvida: DILMUROD KIZI yoki ALISHER UGLI">
-              <input id="patronymic" value={f.patronymic} placeholder="DILMUROD KIZI" maxLength={40}
+              hint="Pasportdagi lotin yozuvida: FALONCHI UGLI yoki FALONCHI KIZI">
+              <input id="patronymic" value={f.patronymic} placeholder="FALONCHI UGLI" maxLength={40}
                 autoComplete="additional-name" autoCapitalize="characters" spellCheck={false} enterKeyHint="next"
                 onChange={(e) => set("patronymic", onlyLatin(e.target.value))} />
             </Field>

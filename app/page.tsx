@@ -36,9 +36,16 @@ export default function Home() {
             <h1 className="anim-up" style={{ animationDelay: "140ms" }}>
               Viza holatini <span className="accent">tekshiring</span>
             </h1>
-            <p className="anim-up" style={{ animationDelay: "220ms" }}>
-              Pasport ma'lumotlarini kiriting — arizangiz holati bir necha soniyada chiqadi.
-            </p>
+            <div className="hero-note anim-up" style={{ animationDelay: "220ms" }}>
+              <p>
+                Ushbu sayt talabalar uchun qulaylik yaratish maqsadida ishlab chiqilgan.
+                Bu yerda viza holatingizni tekshirishingiz mumkin.
+              </p>
+              <p>
+                Rasmiy sayt:{" "}
+                <a href="https://www.visa.go.kr" target="_blank" rel="noopener noreferrer">visa.go.kr</a>
+              </p>
+            </div>
           </section>
 
           <div className="anim-up" style={{ animationDelay: "300ms" }}>

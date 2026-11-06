@@ -39,11 +39,12 @@ export default function Home() {
             <div className="hero-note anim-up" style={{ animationDelay: "220ms" }}>
               <p>
                 Ushbu sayt talabalar uchun qulaylik yaratish maqsadida ishlab chiqilgan.
-                Bu yerda viza holatingizni tekshirishingiz mumkin.
+                Bu yerda faqat viza holatingizni tekshirishingiz mumkin.
               </p>
               <p>
-                Rasmiy sayt:{" "}
-                <a href="https://www.visa.go.kr" target="_blank" rel="noopener noreferrer">visa.go.kr</a>
+                Ma'lumotlar rasmiy{" "}
+                <a href="https://www.visa.go.kr" target="_blank" rel="noopener noreferrer">visa.go.kr</a>{" "}
+                saytidan olinadi.
               </p>
             </div>
           </section>

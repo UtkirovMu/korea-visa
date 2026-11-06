@@ -26,12 +26,14 @@ export async function POST(req: Request) {
   // Honeypot: odam ko'rmaydigan maydon to'ldirilgan bo'lsa — bot
   if (typeof body.website === "string" && body.website.length > 0) return fail(400, "So'rov rad etildi.");
 
-  const started = Number(body.startedAt);
-  const now = Date.now();
-  if (!Number.isFinite(started) || started > now + 5_000 || now - started > 6 * 3600_000) {
+  // Brauzer formani to'ldirishga ketgan vaqtni (ms) yuboradi. Mijoz soati bilan solishtirilmaydi:
+  // foydalanuvchi kompyuterining soati noto'g'ri bo'lsa ham tekshiruv ishlayveradi.
+  const elapsed = Number(body.elapsedMs);
+  if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed > 6 * 3600_000) {
     return fail(400, "Sahifani yangilab, qaytadan urinib ko'ring.");
   }
-  if (now - started < MIN_FILL_MS) return fail(400, "Iltimos, ma'lumotlarni tekshirib, qaytadan yuboring.");
+  if (elapsed < MIN_FILL_MS) return fail(400, "Iltimos, ma'lumotlarni tekshirib, qaytadan yuboring.");
+  const started = Date.now() - elapsed; // server soati bo'yicha
 
   const parsed = parseQuery(body);
   if (!parsed.ok) return fail(400, parsed.message);

@@ -118,13 +118,13 @@ export default function VisaChecker() {
   const [formError, setFormError] = useState("");
   const [view, setView] = useState<View>({ kind: "form" });
   const [maxDate, setMaxDate] = useState("");
-  const startedAt = useRef(0);
+  const startedAt = useRef(0); // performance.now() — kompyuter soati noto'g'ri bo'lsa ham ishlaydi
   const honeypot = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    startedAt.current = Date.now();
+    startedAt.current = performance.now();
     setMaxDate(todayISO());
     return () => abort.current?.abort();
   }, []);
@@ -172,7 +172,7 @@ export default function VisaChecker() {
         name: f.name,
         patronymic: f.patronymic,
         birthDate: f.birthDate,
-        startedAt: startedAt.current,
+        elapsedMs: Math.round(performance.now() - startedAt.current), // soatdan mustaqil (monoton) vaqt
         website: honeypot.current?.value ?? "",
       }, ctrl.signal);
 
@@ -197,7 +197,7 @@ export default function VisaChecker() {
   function reset(clear: boolean) {
     abort.current?.abort();
     if (clear) setF(EMPTY);
-    startedAt.current = Date.now();
+    startedAt.current = performance.now();
     setView({ kind: "form" });
   }
 

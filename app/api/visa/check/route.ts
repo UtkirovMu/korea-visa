@@ -1,5 +1,8 @@
 import { checkRequestShape, clientIp, envInt, fail, issueToken, json, rateLimit, readJsonBody, tokenConfigured } from "@/lib/security";
 import { parseQuery, startCheck } from "@/lib/visa";
+import { maskPassport } from "@/lib/format";
+import { notifyOnce, verifyChatLink } from "@/lib/telegram";
+import { after } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,9 +44,14 @@ export async function POST(req: Request) {
   const global = rateLimit("check:__global", envInt("GLOBAL_CHECKS_PER_HOUR", 600), 3600_000);
   if (!global.ok) return fail(503, "Xizmat hozir band. Birozdan so'ng urinib ko'ring.", { "Retry-After": String(global.retryAfter) });
 
+  // Telegram bot orqali ochilgan bo'lsa: imzolangan chat ID (soxtalashtirib bo'lmaydi)
+  const cid = verifyChatLink(body.tg) ?? undefined;
+  const who = `${parsed.query.english_name} · ${maskPassport(parsed.query.passport_number)}`;
+
   try {
     const { id, result } = await startCheck(parsed.query, started / 1000);
-    return json({ ok: true, token: issueToken(id), result });
+    if (cid) after(() => notifyOnce(id, cid, who, result)); // javob yuborilgandan keyin
+    return json({ ok: true, token: issueToken({ id, cid, who: cid ? who : undefined }), result, notify: Boolean(cid) });
   } catch (e) {
     console.error("[visa/check] upstream:", e instanceof Error ? e.message : "unknown"); // shaxsiy ma'lumot log qilinmaydi
     return fail(502, "Viza xizmati hozir javob bermayapti. Birozdan so'ng urinib ko'ring.");

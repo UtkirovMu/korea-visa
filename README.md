@@ -51,6 +51,16 @@ next.config.ts                Xavfsizlik sarlavhalari
 assets/, app/icon.png         Logo va favicon
 ```
 
+## Telegram bot bilan ishlash
+
+Sayt [visabot](https://github.com/UtkirovMu/visabot) orqali Telegram Web App sifatida ochilganda, tekshiruv natijasi foydalanuvchining Telegram chatiga ham yuboriladi.
+
+- Bot Web App URL'iga `?cid=<chat_id>&sig=<imzo>` qo'shadi. Imzo HMAC-SHA256 bilan olinadi, uning kaliti bot tokenidan hosil qilinadi.
+- Sayt imzoni tekshiradi. Imzosiz, soxta imzoli yoki boshqa chat ID qo'yilgan so'rovlarga hech narsa yuborilmaydi, shuning uchun bot orqali begona odamlarga xabar yuborib bo'lmaydi.
+- Chat ID tekshiruv tokeni ichida (imzolangan holda) saqlanadi. Bitta tekshiruv uchun faqat bitta xabar yuboriladi.
+- Xabarda pasport raqami yashiriladi (`FB24•••48`).
+- Yoqish uchun Railway'da saytga `TELEGRAM_BOT_TOKEN` qo'shing. Bu bot bilan **bir xil** token bo'lishi kerak.
+
 ## Xavfsizlik choralari
 
 **API**

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import mark from "@/assets/mark.png";
+import { KR, formatDate, tr } from "@/lib/format";
 
 /* ------------------------------------------------------------------ */
 /*  Turlar (server lib/visa.ts dagi bilan bir xil)                      */
@@ -30,7 +31,7 @@ type Fields = { passport: string; surname: string; name: string; patronymic: str
 type View =
   | { kind: "form" }
   | { kind: "loading"; step: number }
-  | { kind: "result"; visa: VisaInfo; who: string }
+  | { kind: "result"; visa: VisaInfo; who: string; notified: boolean }
   | { kind: "error"; message: string };
 
 const EMPTY: Fields = { passport: "", surname: "", name: "", patronymic: "", birthDate: "" };
@@ -47,33 +48,6 @@ const onlyLatin = (s: string) => s.replace(/[^A-Za-z\s'`ʻʼ‘’-]/g, "");
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const reducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-const KR: Record<string, string> = {
-  "유학.연수": "O'qish / malaka oshirish",
-  "유학": "O'qish",
-  "연수": "Malaka oshirish",
-  "취업": "Ishga kirish",
-  "방문": "Tashrif",
-  "관광": "Turizm",
-  "상용": "Biznes",
-  "결혼이민": "Nikoh orqali immigratsiya",
-  "접수": "Qabul qilingan",
-  "심사중": "Ko'rib chiqilmoqda",
-  "심사": "Ko'rib chiqilmoqda",
-  "허가": "Ruxsat berilgan",
-  "발급": "Viza berilgan",
-  "불허": "Rad etilgan",
-  "보완": "Qo'shimcha hujjat kerak",
-  "반려": "Qaytarilgan",
-  "취소": "Bekor qilingan",
-};
-const tr = (v: string) => (v ? (KR[v] ? `${KR[v]} · ${v}` : v) : "");
-
-const MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
-function formatDate(iso: string) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  return m ? `${+m[3]}-${MONTHS[+m[2] - 1]}, ${m[1]}` : iso;
-}
 
 /** Elchixonadagi holatdan 3 bosqichli timeline: 0 qabul, 1 ko'rib chiqish, 2 qaror */
 function stageOf(v: VisaInfo): { index: number; tone: "ok" | "bad" | "warn" | "neutral"; final: string } | null {
@@ -159,9 +133,14 @@ export default function VisaChecker() {
   const abort = useRef<AbortController | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const tgLink = useRef<{ cid: string; sig: string } | null>(null);
 
   useEffect(() => {
     startedAt.current = performance.now();
+    // Bot orqali ochilganda URL'da imzolangan chat ID bo'ladi: ?cid=...&sig=...
+    const sp = new URLSearchParams(window.location.search);
+    const cid = sp.get("cid"), sig = sp.get("sig");
+    if (cid && sig && /^\d{1,16}$/.test(cid) && /^[A-Za-z0-9_-]{43}$/.test(sig)) tgLink.current = { cid, sig };
     setMaxDate(todayISO());
     return () => abort.current?.abort();
   }, []);
@@ -219,7 +198,7 @@ export default function VisaChecker() {
     setView({ kind: "loading", step: 0 });
 
     try {
-      const start = await post<{ token: string; result: VisaResult }>("/api/visa/check", {
+      const start = await post<{ token: string; result: VisaResult; notify?: boolean }>("/api/visa/check", {
         passport: f.passport,
         surname: f.surname,
         name: f.name,
@@ -227,6 +206,7 @@ export default function VisaChecker() {
         birthDate: f.birthDate,
         elapsedMs: Math.round(performance.now() - startedAt.current), // soatdan mustaqil (monoton) vaqt
         website: honeypot.current?.value ?? "",
+        ...(tgLink.current ? { tg: tgLink.current } : {}),
       }, ctrl.signal);
 
       let result = start.result;
@@ -240,7 +220,7 @@ export default function VisaChecker() {
       if (result.state === "done") {
         setView({ kind: "loading", step: DONE_STEP }); // hamma bosqichlar ✓
         await sleep(reducedMotion() ? 0 : 550, ctrl.signal);
-        setView({ kind: "result", visa: result.visa, who });
+        setView({ kind: "result", visa: result.visa, who, notified: start.notify === true });
       } else if (result.state === "not_found") {
         throw new Error(result.message || "Bu ma'lumotlar bo'yicha ariza topilmadi. Pasport raqami, ism-familiya (pasportdagidek) va tug'ilgan sanani tekshiring.");
       } else {
@@ -321,7 +301,7 @@ export default function VisaChecker() {
 
         {view.kind === "loading" && <Loading step={view.step} onCancel={() => reset(false)} />}
 
-        {view.kind === "result" && <Result visa={view.visa} who={view.who} onAgain={() => reset(true)} />}
+        {view.kind === "result" && <Result visa={view.visa} who={view.who} notified={view.notified} onAgain={() => reset(true)} />}
 
         {view.kind === "error" && (
           <div className="card center" role="alert">
@@ -382,7 +362,7 @@ function Loading({ step, onCancel }: { step: number; onCancel: () => void }) {
   );
 }
 
-function Result({ visa, who, onAgain }: { visa: VisaInfo; who: string; onAgain: () => void }) {
+function Result({ visa, who, notified, onAgain }: { visa: VisaInfo; who: string; notified: boolean; onAgain: () => void }) {
   const p = visa.processing;
   const daysTarget = Number(p?.message.match(/(\d+)\s*kun/)?.[1] ?? (p?.averageDays ? Math.round(p.averageDays) : 0));
   const days = useCountUp(daysTarget);
@@ -448,6 +428,12 @@ function Result({ visa, who, onAgain }: { visa: VisaInfo; who: string; onAgain: 
           <p className="note rise" style={{ animationDelay: "700ms" }}>Bu holat uchun qo'shimcha hujjat talab qilinadi. Batafsil ma'lumot uchun bizga yozing.</p>
         )}
 
+        {notified && (
+          <p className="tg-note rise" style={{ animationDelay: "760ms" }}>
+            <TelegramIcon /> Natija Telegram chatingizga ham yuborildi
+          </p>
+        )}
+
         <p className="who">{who}</p>
         <button type="button" className="btn btn-dark" onClick={onAgain}>Yangi tekshiruv</button>
       </div>
@@ -495,6 +481,13 @@ function WarnIcon() {
 }
 function CheckIcon() {
   return <svg {...svg} width={14} height={14} strokeWidth={3}><path d="m5 12 5 5 9-10" /></svg>;
+}
+function TelegramIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M21.94 4.3a1 1 0 0 0-1.36-1.07L2.66 10.2a1 1 0 0 0 .06 1.88l4.4 1.4 1.7 5.36a1 1 0 0 0 1.66.4l2.45-2.4 4.3 3.17a1 1 0 0 0 1.57-.6L21.94 4.3ZM9.7 14.2l-.6 3.13-1.12-3.55 9.27-6.1-7.55 6.52Z" />
+    </svg>
+  );
 }
 function SearchIcon() {
   return <svg {...svg} width={18} height={18} strokeWidth={2.4}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>;

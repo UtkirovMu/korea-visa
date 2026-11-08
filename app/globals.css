@@ -314,6 +314,11 @@ dl { display: grid; gap: 10px; margin: 0; font-size: 14px; }
 dt { color: var(--muted); }
 dd { margin: 0; font-weight: 600; text-align: right; word-break: break-word; }
 .note { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: #fff3e0; color: #7a4b00; font-size: 14px; }
+.tg-note {
+  display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 10px 12px;
+  border-radius: 12px; background: #e8f4fd; color: #0b5c8c; font-size: 13.5px; font-weight: 600;
+}
+.tg-note svg { flex: none; color: #229ed9; }
 .who { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); word-break: break-word; }
 
 /* ================================================================== */

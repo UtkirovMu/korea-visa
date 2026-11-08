@@ -170,13 +170,16 @@ export function tokenConfigured(): boolean {
 const b64url = (b: Buffer | string) => Buffer.from(b).toString("base64url");
 const sign = (payload: string) => createHmac("sha256", secret()).update(payload).digest();
 
-export function issueToken(id: string, ttlSeconds = 15 * 60): string {
-  const payload = `${id}.${Math.floor(Date.now() / 1000) + ttlSeconds}`;
+/** Token ichidagi ma'lumot: tashqi API ID'si, ixtiyoriy Telegram chat ID va kim tekshirgani (natija xabari uchun). */
+export type TokenData = { id: string; cid?: number; who?: string };
+
+export function issueToken(data: TokenData, ttlSeconds = 15 * 60): string {
+  const payload = JSON.stringify({ ...data, exp: Math.floor(Date.now() / 1000) + ttlSeconds });
   return `${b64url(payload)}.${b64url(sign(payload))}`;
 }
 
-export function verifyToken(token: unknown, idPattern: RegExp): string | null {
-  if (typeof token !== "string" || token.length > 256) return null;
+export function verifyToken(token: unknown, idPattern: RegExp): TokenData | null {
+  if (typeof token !== "string" || token.length > 1024) return null;
   const parts = token.split(".");
   if (parts.length !== 2) return null;
   let payload: string;
@@ -190,8 +193,17 @@ export function verifyToken(token: unknown, idPattern: RegExp): string | null {
   const expected = sign(payload);
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
 
-  const [id, exp] = payload.split(".");
-  if (!idPattern.test(id || "")) return null;
-  if (!/^\d{9,11}$/.test(exp || "") || Number(exp) < Date.now() / 1000) return null;
-  return id;
+  let d: Record<string, unknown>;
+  try {
+    d = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  if (typeof d.id !== "string" || !idPattern.test(d.id)) return null;
+  if (typeof d.exp !== "number" || d.exp < Date.now() / 1000) return null;
+  return {
+    id: d.id,
+    cid: typeof d.cid === "number" && Number.isSafeInteger(d.cid) && d.cid > 0 ? d.cid : undefined,
+    who: typeof d.who === "string" ? d.who.slice(0, 160) : undefined,
+  };
 }

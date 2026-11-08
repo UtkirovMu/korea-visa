@@ -64,8 +64,8 @@ assets/, app/icon.png         Logo va favicon
 - Xato xabarlari umumiy. Loglarda pasport yoki ism yozilmaydi. Hech qanday shaxsiy ma'lumot saqlanmaydi (bazasi ham, cookie ham yo'q).
 
 **Sahifa**
-- Har so'rovda yangi nonce bilan qat'iy CSP: begona skript ishlamaydi, boshqa domenlarga ulanib bo'lmaydi, sayt iframe ichiga joylanmaydi.
-- HSTS, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, COOP/CORP sarlavhalari qo'yilgan.
+- Har so'rovda yangi nonce bilan qat'iy CSP: begona skript ishlamaydi, boshqa domenlarga ulanib bo'lmaydi. Saytni iframe ichida faqat Telegram Web (Web App) ocha oladi.
+- HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, COOP/CORP sarlavhalari qo'yilgan.
 - `X-Powered-By` o'chirilgan. `/_next/image` endpointi o'chirilgan (rasm optimizatsiyasi orqali DoS xavfi).
 - React tufayli barcha ma'lumot avtomatik escape qilinadi, `dangerouslySetInnerHTML` ishlatilmagan.
 

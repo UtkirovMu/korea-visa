@@ -1,6 +1,6 @@
 // Next.js 16 "proxy" (avvalgi nomi: middleware).
 // Har bir sahifa so'roviga yangi nonce bilan qat'iy Content-Security-Policy qo'yadi:
-// faqat shu nonce'ga ega skriptlar ishlaydi, boshqa saytga ulanish, iframe ichiga joylash taqiqlanadi.
+// faqat shu nonce'ga ega skriptlar ishlaydi, boshqa saytga ulanish taqiqlanadi, iframe faqat Telegram Web'ga ruxsat.
 import { NextResponse, type NextRequest } from "next/server";
 
 export function proxy(request: NextRequest) {
@@ -18,7 +18,9 @@ export function proxy(request: NextRequest) {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
+    // Faqat Telegram Web (web.telegram.org) Web App sifatida iframe'da ocha oladi; boshqa saytlar — yo'q.
+    // Telegram mobil/desktop ilovalari iframe ishlatmaydi, ularga bu cheklov ta'sir qilmaydi.
+    "frame-ancestors 'self' https://web.telegram.org",
     "manifest-src 'self'",
     "worker-src 'self'",
     ...(isDev ? [] : ["upgrade-insecure-requests"]),

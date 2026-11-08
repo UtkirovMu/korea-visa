@@ -61,6 +61,27 @@ Sayt [visabot](https://github.com/UtkirovMu/visabot) orqali Telegram Web App sif
 - Xabarda pasport raqami yashiriladi (`FB24•••48`).
 - Yoqish uchun Railway'da saytga `TELEGRAM_BOT_TOKEN` qo'shing. Bu bot bilan **bir xil** token bo'lishi kerak.
 
+### Premium emoji
+
+Bot egasida Telegram Premium bo'lsa (Bot API 9.4+), xabardagi emojilarni premium emojilarga almashtirish mumkin. Ularni o'quvchilarda Premium bo'lmasa ham hamma ko'radi.
+
+1. Botga kerakli premium emojilarni yuboring. Bot har birining ID'sini qaytaradi.
+2. Railway'da saytga `TELEGRAM_CUSTOM_EMOJI` o'zgaruvchisini qo'shing, masalan: `bell=5368324170671202286,user=...,status=...`
+
+| Kalit | Oddiy emoji | Qayerda |
+|---|---|---|
+| `bell` | 🔔 | Sarlavha |
+| `user` | 👤 | Ism-familiya |
+| `status` | 📌 | Holat |
+| `date` | 📅 | Ariza sanasi |
+| `type` | 🗂 | Viza turi |
+| `embassy` | 🏛 | Elchixonadagi holat |
+| `time` | ⏳ | Taxminiy muddat |
+| `warn` | ⚠️ | Qo'shimcha hujjat |
+| `notfound` | ❌ | Ariza topilmadi |
+
+Berilmagan kalitlar uchun oddiy emoji ishlatiladi. Telegram premium emojini rad etsa (masalan, egasida Premium yo'q bo'lsa), xabar avtomatik ravishda oddiy emojilar bilan qayta yuboriladi.
+
 ## Xavfsizlik choralari
 
 **API**
